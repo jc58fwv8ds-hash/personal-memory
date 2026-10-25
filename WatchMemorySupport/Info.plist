@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<!-- Keeps a recording the user started running after the wrist is lowered or the watch face is shown (2026-10-25). -->
+<key>WKBackgroundModes</key><array><string>audio</string></array>
+</dict></plist>

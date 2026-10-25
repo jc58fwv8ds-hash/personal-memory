@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>local.harness.personalmemory.calendar</string>
+<key>CFBundleName</key><string>Personal Memory Calendar</string>
+<key>CFBundleDisplayName</key><string>Personal Memory Calendar</string>
+<key>CFBundleExecutable</key><string>MemoryCalendar</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleShortVersionString</key><string>0.1.0</string>
+<key>CFBundleVersion</key><string>1</string>
+<key>LSMinimumSystemVersion</key><string>14.0</string>
+<key>NSHighResolutionCapable</key><true/>
+<key>NSSpeechRecognitionUsageDescription</key><string>選んだ録音をこのMac内で文字起こしし、予定の候補を作ります。対応できない場合は外部に送信せず停止します。</string>
+<key>NSCalendarsWriteOnlyAccessUsageDescription</key><string>あなたが内容を確認して登録ボタンを押した予定だけをカレンダーに追加します。既存の予定は読み取りません。</string>
+<key>NSLocalNetworkUsageDescription</key><string>同じネットワーク上のiPhoneから録音を直接受け取り、このMac内で保存・文字起こしします。</string>
+<key>NSBonjourServices</key><array><string>_pmemory-sync._tcp</string></array>
+</dict></plist>
