@@ -34,16 +34,24 @@ struct RecordingsView: View {
                             .font(.caption).monospacedDigit()
                     }
                 }
-                Section("録音 \(items.count)件") {
-                    ForEach(items) { item in
-                        let active = player.isBusy && player.selectedID == item.id
+                // One row per day (2026-10-26): the Watch saves a piece every 10 minutes, but a person thinks in days.
+                Section("日ごとの録音") {
+                    ForEach(days, id: \.day) { day in
+                        let active = player.isBusy && player.playingDay == day.day
                         Button {
-                            if active { player.stop() } else { player.play(item) }
+                            if active { player.stop() } else { player.play(day: day.day, pieces: day.pieces) }
                         } label: {
                             HStack {
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(item.savedAt, format: .dateTime.month().day().hour().minute().second())
-                                    Text(active ? "停止" : "再生").font(.caption)
+                                    Text(day.day, format: .dateTime.month().day().weekday())
+                                        .font(.headline)
+                                    Text(Self.summary(of: day)).font(.caption).foregroundStyle(.secondary)
+                                    if active {
+                                        Text("再生中 \(player.position + 1)/\(day.pieces.count)・"
+                                             + (day.pieces[min(player.position, day.pieces.count - 1)].recordedAt
+                                                .formatted(date: .omitted, time: .shortened)) + "の部分")
+                                            .font(.caption)
+                                    }
                                 }
                                 Spacer(minLength: 4)
                                 Image(systemName: active ? "stop.fill" : "play.fill")
@@ -52,17 +60,14 @@ struct RecordingsView: View {
                             .contentShape(Rectangle())
                         }
                         .disabled(player.isBusy && !active)
-                        .accessibilityIdentifier("play-recording-\(item.id.uuidString)")
-#if os(iOS)
-                        RecordingShareButton(item: item)
-#endif
+                        .accessibilityIdentifier("play-day-\(Int(day.day.timeIntervalSince1970))")
                     }
                 }
                 Section {
-                    Text("保存した日時の新しい順です。原本は消しません。")
+                    Text("新しい日から並びます。押すとその日の録音を頭から続けて再生します。原本は消しません。")
                         .font(.caption).foregroundStyle(.secondary)
 #if os(iOS)
-                    Text("「Macなどへ共有」でAirDropやファイル保存を選べます。Macへの自動中継・AI整理はまだ準備中です。")
+                    Text("Macへは「Macと同期」で設定した共有フォルダから自動で届きます。文字起こしと整理はMacのアプリで行います。")
                         .font(.caption).foregroundStyle(.secondary)
 #endif
 #if os(watchOS)
@@ -79,6 +84,17 @@ struct RecordingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { _ in
             player.stop()
         }
+    }
+
+    private var days: [RecordingDay<RecordingItem>] {
+        RecordingDays.group(items, calendar: .current, start: \.recordedAt, end: { $0.end ?? $0.recordedAt })
+    }
+
+    private static func summary(of day: RecordingDay<RecordingItem>) -> String {
+        let span = day.start.formatted(date: .omitted, time: .shortened) + "〜" + day.end.formatted(date: .omitted, time: .shortened)
+        let minutes = Int(day.seconds / 60)
+        let length = minutes >= 60 ? "\(minutes / 60)時間\(minutes % 60)分" : "\(minutes)分"
+        return day.seconds > 0 ? "\(span)・\(length)" : span
     }
 
     private func reload() async {

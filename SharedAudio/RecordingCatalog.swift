@@ -5,6 +5,11 @@ public struct RecordingItem: Identifiable, Sendable, Equatable {
     public let url: URL
     public let savedAt: Date
     public let byteCount: Int64
+    /// When the piece was recorded, from the Watch's chunk record next to it (2026-10-26); nil for older single recordings.
+    public var start: Date? = nil
+    public var end: Date? = nil
+    /// The time to group and sort by: recording start when known, otherwise when the file was saved.
+    public var recordedAt: Date { start ?? savedAt }
 }
 
 public enum RecordingCatalog {
@@ -67,15 +72,20 @@ public enum RecordingCatalog {
                     guard fileAttrs[.type] as? FileAttributeType == .typeRegular,
                           let size = (fileAttrs[.size] as? NSNumber)?.int64Value,
                           (1...100_000_000).contains(size) else { continue }
+                    // The chunk record uses JSONEncoder's default dates: seconds since 2001-01-01.
+                    let record = (try? Data(contentsOf: folder.appendingPathComponent(id.uuidString + ".json")))
+                        .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+                    let time = { (key: String) in (record?[key] as? Double).map(Date.init(timeIntervalSinceReferenceDate:)) }
                     items.append(RecordingItem(id: id, url: audio,
-                        savedAt: fileAttrs[.modificationDate] as? Date ?? .distantPast, byteCount: size))
+                        savedAt: fileAttrs[.modificationDate] as? Date ?? .distantPast, byteCount: size,
+                        start: time("start"), end: time("end")))
                 }
             }
         }
 
         return items.sorted { lhs, rhs in
-            if lhs.savedAt != rhs.savedAt {
-                return lhs.savedAt > rhs.savedAt
+            if lhs.recordedAt != rhs.recordedAt {
+                return lhs.recordedAt > rhs.recordedAt
             }
             return lhs.id.uuidString < rhs.id.uuidString
         }

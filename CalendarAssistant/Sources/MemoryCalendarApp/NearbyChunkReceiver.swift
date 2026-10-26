@@ -107,6 +107,15 @@ extension NearbyChunkReceiver: MCSessionDelegate {
         return chunk
     }
 
+    /// The user deleted these pieces' audio from this Mac (DaySession): to the Trash, receipts stay.
+    func retireAudio(of chunkIDs: Set<UUID>) throws -> Int {
+        let moved = try workspace.retireAudio(of: chunkIDs) { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
+        savedChunks = try workspace.receipts()
+        return moved
+    }
+
+    func isRetired(_ chunkID: UUID) -> Bool { workspace.isRetired(chunkID) }
+
     func audioURL(for receipt: SessionChunkReceipt) -> URL {
         workspace.root.appendingPathComponent("Audio/\(receipt.recordingHash).m4a")
     }

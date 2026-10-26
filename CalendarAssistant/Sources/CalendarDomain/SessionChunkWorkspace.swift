@@ -24,14 +24,22 @@ public struct SessionChunkWorkspace: Sendable {
         return try files.filter { $0.pathExtension == "json" }.map { url in
             let receipt = try JSONDecoder().decode(SessionChunkReceipt.self,
                 from: Data(contentsOf: url))
-            guard url.deletingPathExtension().lastPathComponent == receipt.chunkID.uuidString,
-                  FileManager.default.fileExists(atPath: root.appendingPathComponent("Audio/\(receipt.recordingHash).m4a").path)
-            else { throw RecordingWorkspace.WorkspaceError.corrupt }
+            guard url.deletingPathExtension().lastPathComponent == receipt.chunkID.uuidString else {
+                throw RecordingWorkspace.WorkspaceError.corrupt
+            }
+            let audio = root.appendingPathComponent("Audio/\(receipt.recordingHash).m4a")
+            guard isRetired(receipt.chunkID) || FileManager.default.fileExists(atPath: audio.path) else {
+                throw RecordingWorkspace.WorkspaceError.corrupt
+            }
             return receipt
         }.sorted { $0.start < $1.start }
     }
 
     public func importChunk(audio: URL, metadata: RecordingSession.Chunk) throws -> SessionChunkReceipt {
+        let existing = root.appendingPathComponent("Receipts/\(metadata.chunkID.uuidString).json")
+        if isRetired(metadata.chunkID), FileManager.default.fileExists(atPath: existing.path) {
+            return try JSONDecoder().decode(SessionChunkReceipt.self, from: Data(contentsOf: existing))
+        }
         guard metadata.sequence > 0, metadata.end >= metadata.start,
               metadata.duration.isFinite, metadata.duration > 0,
               metadata.duration <= metadata.end.timeIntervalSince(metadata.start) + 1,
@@ -62,6 +70,42 @@ public struct SessionChunkWorkspace: Sendable {
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: destination.path)
         }
         return receipt
+    }
+
+    /// The user chose to delete these pieces' audio from this Mac (2026-10-26): their receipts stay (so the shared folder
+    /// does not import them again and their transcripts keep their times), the audio goes to the Trash through `trash`.
+    /// Returns how many audio files were handed to `trash`.
+    @discardableResult
+    public func retireAudio(of chunkIDs: Set<UUID>, trash: (URL) throws -> Void) throws -> Int {
+        let all = try receipts()
+        let selected = all.filter { chunkIDs.contains($0.chunkID) && !isRetired($0.chunkID) }
+        guard !selected.isEmpty else { return 0 }
+        let retired = root.appendingPathComponent("Retired", isDirectory: true)
+        try FileManager.default.createDirectory(at: retired, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
+        for receipt in selected {
+            let marker = retired.appendingPathComponent(receipt.chunkID.uuidString)
+            try Data().write(to: marker, options: .withoutOverwriting)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: marker.path)
+        }
+        var hashes = Set<String>()
+        for receipt in selected {
+            guard hashes.insert(receipt.recordingHash).inserted else { continue }
+            let audio = root.appendingPathComponent("Audio/\(receipt.recordingHash).m4a")
+            guard FileManager.default.fileExists(atPath: audio.path),
+                  !all.contains(where: { $0.chunkID != receipt.chunkID && $0.recordingHash == receipt.recordingHash
+                                          && !isRetired($0.chunkID) }) else {
+                hashes.remove(receipt.recordingHash)
+                continue
+            }
+            try trash(audio)
+        }
+        return hashes.count
+    }
+
+    /// Whether the audio of this piece was deleted by the user.
+    public func isRetired(_ chunkID: UUID) -> Bool {
+        FileManager.default.fileExists(atPath: root.appendingPathComponent("Retired/\(chunkID.uuidString)").path)
     }
 
     private func checksum(_ url: URL) throws -> String {

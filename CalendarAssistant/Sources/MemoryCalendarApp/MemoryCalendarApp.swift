@@ -4,7 +4,7 @@ import AppKit
 @main struct MemoryCalendarApp: App {
     @State private var session = CalendarSession()
     var body: some Scene {
-        WindowGroup("Personal Memory — 録音から予定へ") {
+        WindowGroup("Personal Memory") {
             CalendarWorkspaceView(session: session).frame(minWidth: 880, minHeight: 650)
                 .onAppear { NSApp.setActivationPolicy(.regular); NSApp.activate(ignoringOtherApps: true) }
         }.defaultSize(width: 1040, height: 800)
@@ -14,17 +14,18 @@ import AppKit
 struct CalendarWorkspaceView: View {
     @Bindable var session: CalendarSession
     @State private var days = DayMemorySession()
-    @State private var mode = Mode.calendar
+    @State private var mode = Mode.days
     @State private var relay: RelayFolderWatcher?
-    enum Mode: String, CaseIterable { case calendar = "予定", day = "一日の記憶" }
+    @State private var daySession: DaySession?
+    enum Mode: String, CaseIterable { case days = "日ごと", day = "一日の記憶", calendar = "ファイルから" }
     @StateObject private var nearby = NearbyChunkReceiver(root: FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/PersonalMemoryCalendar/ReceivedChunks"))
     var body: some View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 24) {
                 Image(systemName: "waveform.badge.plus").font(.system(size: 36)).foregroundStyle(.teal)
-                Text("録音から、\n次の予定へ。").font(.largeTitle.weight(.semibold))
-                Text("1  録音を読み込む\n\n2  言葉を確認する\n\n3  予定を整える\n\n4  確認して登録").foregroundStyle(.secondary)
+                Text("一日の録音を、\n予定とメモへ。").font(.largeTitle.weight(.semibold))
+                Text("1  日付を選ぶ\n\n2  この日を文字起こし\n\n3  項目に分けて提案\n\n4  確かめて保存").foregroundStyle(.secondary)
                 Spacer()
                 Text("音声とAI処理はこのMac内。\n登録先のカレンダーは、そのアカウントの同期設定に従います。")
                     .font(.caption).foregroundStyle(.secondary)
@@ -33,8 +34,25 @@ struct CalendarWorkspaceView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     Picker("画面", selection: $mode) {
                         ForEach(Mode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                    }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 320)
-                    if mode == .day {
+                    }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 380)
+                    if mode == .days {
+                        if let daySession { DayListView(session: daySession, receiver: nearby, model: session.model) }
+                        DisclosureGroup("iPhoneとの接続") {
+                            if let relay { RelayFolderRow(watcher: relay) }
+                            HStack {
+                                Label("同じWi‑Fiで直接", systemImage: "iphone.gen3.radiowaves.left.and.right")
+                                Spacer()
+                                Text(nearby.pairingCode).monospacedDigit().fontWeight(.semibold)
+                            }
+                            Text("iPhoneの「Macと同期」にこの番号を入力すると直接送れます。" + nearby.status)
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        DisclosureGroup("ローカルAIの設定") {
+                            TextField("モデル", text: $session.model).textFieldStyle(.roundedBorder)
+                            Text("Ollamaの127.0.0.1:11434だけに接続します。モデルがなければ自動ダウンロードせず停止します。")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    } else if mode == .day {
                         DayMemoryView(session: days, model: session.model)
                     } else {
                     HStack {
@@ -45,25 +63,6 @@ struct CalendarWorkspaceView: View {
                     }
                     Text(session.message).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                         .padding().background(.teal.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-                    HStack {
-                        Label("iPhoneと接続", systemImage: "iphone.gen3.radiowaves.left.and.right")
-                        Spacer()
-                        Text(nearby.pairingCode).monospacedDigit().fontWeight(.semibold)
-                    }
-                    Text("iPhoneの接続画面にこの番号を入力してください。" + nearby.status)
-                        .font(.caption).foregroundStyle(.secondary)
-                    if let relay { RelayFolderRow(watcher: relay) }
-                    if !nearby.savedChunks.isEmpty {
-                        DisclosureGroup("受信済み録音（\(nearby.savedChunks.count)件）") {
-                            ForEach(nearby.savedChunks) { receipt in
-                                Button(receipt.start.formatted(date: .abbreviated, time: .shortened)
-                                       + " · 区切り\(receipt.sequence)") {
-                                    session.receiveVerifiedChunk(nearby.audioURL(for: receipt),
-                                                                 startedAt: receipt.start)
-                                }.disabled(session.busy)
-                            }
-                        }
-                    }
                     if session.busy { HStack { ProgressView().controlSize(.small); Button("中止") { session.cancel() } } }
                     if !session.storageHealthy { Button("変更の保存を再試行") { session.retryLocalSave() } }
                     if let doc = session.document {
@@ -104,7 +103,7 @@ struct CalendarWorkspaceView: View {
                         }
                     } else {
                         ContentUnavailableView("録音を予定につなげましょう", systemImage: "calendar.badge.clock",
-                            description: Text("iPhoneから届いた録音、またはMac上のm4aを読み込めます。"))
+                            description: Text("Mac上のm4aを1つずつ読み込めます。Watchの録音は「日ごと」にまとまっています。"))
                     }
                     DisclosureGroup("ローカルAIの設定") {
                         TextField("モデル", text: $session.model).textFieldStyle(.roundedBorder).disabled(session.busy)
@@ -127,14 +126,12 @@ struct CalendarWorkspaceView: View {
             } message: { id in
                 Text(confirmationSummary(id))
             }
-        .onAppear { if relay == nil { relay = RelayFolderWatcher(receiver: nearby) } }
-        .onChange(of: nearby.latestChunk) { _, value in
-            // A background delivery must not replace a transcript or proposal the
-            // user is reviewing. The new recording remains in the received list.
-            if let value, session.document == nil {
-                session.receiveVerifiedChunk(value.audioURL, startedAt: value.startedAt)
-            }
+        .onAppear {
+            if relay == nil { relay = RelayFolderWatcher(receiver: nearby) }
+            if daySession == nil { daySession = DaySession(receiver: nearby) }
         }
+        // 2026-10-26: pieces arriving from the iPhone are no longer opened and transcribed one by one here;
+        // they join their day in 日ごと, where the whole day is transcribed on request.
     }
 
     private func confirmationSummary(_ id: UUID) -> String {

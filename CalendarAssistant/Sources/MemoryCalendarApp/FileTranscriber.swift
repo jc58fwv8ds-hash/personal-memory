@@ -42,7 +42,7 @@ import AVFoundation
                                            duration: CMTime(seconds: length, preferredTimescale: 600))
             try await export.export(to: segment, as: .m4a)
             let text = try await recognizeShort(segment, recognizer: recognizer)
-            sections.append("[\(Int(offset / 60)):" + String(format: "%02d", Int(offset) % 60) + "] " + text)
+            if !text.isEmpty { sections.append("[\(Int(offset / 60)):" + String(format: "%02d", Int(offset) % 60) + "] " + text) }
             offset += length
         }
         return sections.joined(separator: "\n")
@@ -58,7 +58,9 @@ import AVFoundation
                 activeID = id
                 self.continuation = continuation
                 recognition = recognizer.recognitionTask(with: request) { @Sendable [weak self] result, error in
-                    let text = result?.isFinal == true ? result?.bestTranscription.formattedString : nil
+                    var text = result?.isFinal == true ? result?.bestTranscription.formattedString : nil
+                    // A quiet stretch of a long day is not a failure (Speech reports "No speech detected", 1110).
+                    if text == nil, let error = error as NSError?, error.code == 1110 { text = "" }
                     let failure = error?.localizedDescription
                     Task { @MainActor in
                         if let text { self?.finish(.success(text), id: id) }

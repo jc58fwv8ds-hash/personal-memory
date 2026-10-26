@@ -1,6 +1,6 @@
 # Personal Memory Calendar (Mac companion)
 
-Watch recording → iPhone → Mac import → on-device transcription → local LLM: the day's memory (一日の記憶) and calendar proposals (予定) the user reviews. No cloud AI, no API keys.
+Watch recording → iPhone → Mac import → the day's on-device transcription → local LLM: calendar and memo suggestions the user reviews, and the day's memory (一日の記憶). No cloud AI, no API keys.
 
 ## Run
 
@@ -11,6 +11,15 @@ Getting recordings from the iPhone (any of these):
 - **Shared folder (recommended)**: pick the same folder on the iPhone (Macと同期 → iCloud Driveのフォルダ経由) and here (共有フォルダ). `iCloud Drive/Personal Memory` is used automatically when it exists. The iPhone puts each recording there as one `<id>.pmchunk` file; this app checks the folder every 20 seconds while open, asks iCloud to download pieces not yet on this Mac, verifies SHA-256 and imports. The folder is only read.
 - **Same Wi‑Fi**: enter the 6-digit code shown here on the iPhone and send directly.
 - **Manual**: 録音を読み込む and select an m4a (for example one shared by AirDrop).
+
+**日ごと (main screen, 2026-10-26)**: received pieces are grouped by the day they started (`RecordingDays`). Pick a day button, then:
+
+- **この日を文字起こし** transcribes every piece of the day on this Mac, one at a time, and saves each piece's text as soon as it is done (`DayTranscriptBook`, `DayTranscripts/<yyyy-MM-dd>.transcript.json`). Stopping keeps the finished pieces; pressing again continues. Silent pieces are recorded as empty, not as failures.
+- **項目に分けて提案** sends the day's text, about 6,000 characters at a time, to the local model only, which returns calendar and memo suggestions. `ItemSuggestionDecoder` drops any item whose quote is not in the text, and leaves unclear times empty. Suggestions and the user's decisions (edited, dismissed, saved) are kept in `DaySuggestions/<yyyy-MM-dd>.suggestions.json` (`DaySuggestionBook`). Asking again adds only new suggestions.
+- **カレンダーに保存… / メモに保存…** saves one confirmed item: Calendar through write-only EventKit, Notes through one AppleScript `make new note` (macOS asks once for Automation permission; Notes is never read). `saving` is recorded before the save, so an interrupted save is shown for checking instead of being repeated.
+- **この日の音声を削除…** moves this Mac's audio for the day to the Trash (`SessionChunkWorkspace.retireAudio`). Receipts, transcript and suggestions stay, so the shared folder does not bring the pieces back. The iPhone and shared-folder copies are not touched.
+
+**ファイルから** (the older screen) still imports a single m4a:
 
 1. Imports a separate local copy (m4a, 1–20 MB). Original remains unchanged. Content hash identifies repeat imports and reopens their saved drafts and registration states.
 2. Confirm recording date: file creation date may have changed during sharing. Relative dates such as 明日 use this editable reference and the captured time zone.
