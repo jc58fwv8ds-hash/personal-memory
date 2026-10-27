@@ -32,6 +32,7 @@ struct DayListView: View {
         }
         .onAppear {
             session.refreshCounts()
+            session.shareEarlierDeletions()
             if session.selected == nil, let newest = session.days.first { session.select(newest.day) }
         }
         .onChange(of: receiver.savedChunks.count) { _, _ in session.refreshCounts() }
@@ -132,7 +133,7 @@ private struct DayDetail: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("この日の音声").font(.headline)
                     Text(session.audioDeleted(day) ? "このMacからは削除済みです(文字起こしと候補は残っています)。"
-                         : "文字起こしの後は、音声をこのMacから削除できます。iPhoneと共有フォルダの原本は残ります。")
+                         : "文字起こしの後は、この日の音声をMac・共有フォルダ・iPhoneから削除できます。")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -153,7 +154,7 @@ private struct DayDetail: View {
         } message: {
             let left = day.pieces.count - (session.transcribedByDay[day.day] ?? 0)
             Text((left > 0 ? "まだ文字起こししていない録音が\(left)件あります。削除すると、このMacでは文字起こしできなくなります。\n\n" : "")
-                 + "このMacにある\(day.day.formatted(date: .abbreviated, time: .omitted))の音声をゴミ箱に移します。文字起こしと候補は残ります。iPhoneと共有フォルダの原本は消しません。")
+                 + "\(day.day.formatted(date: .abbreviated, time: .omitted))の音声を、このMacと共有フォルダからゴミ箱に移し、iPhoneのコピーも消します(Watchからは保存の確認後にすでに消えています)。文字起こしと候補は残ります。")
         }
     }
 

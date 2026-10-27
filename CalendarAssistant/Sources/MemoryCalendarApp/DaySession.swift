@@ -181,8 +181,35 @@ import SessionDomain
                     try FileManager.default.trashItem(at: copy, resultingItemURL: nil)
                 }
             }
-            message = "この日の音声\(moved)件をゴミ箱に移しました。文字起こしと候補は残っています。ゴミ箱を空にするまでは戻せます。"
+            // 2026-10-27: the shared folder's copies go to the Trash too, and a mark tells the iPhone to delete its own.
+            let shared = try shareDeletions(day.pieces.map(\.chunkID))
+            message = "この日の音声をゴミ箱に移しました(このMac \(moved)件、共有フォルダ \(shared)件)。iPhoneのコピーは、iPhoneのアプリが次に開いたときに消えます。文字起こしと候補は残っています。"
         }
+    }
+
+    /// Pieces deleted on this Mac before deletions reached the shared folder (the Mac app of 2026-10-26 deleted only its
+    /// own copy): mark them now so the iPhone deletes its copy too. Called when the screen opens.
+    func shareEarlierDeletions() {
+        let done = Set(UserDefaults.standard.stringArray(forKey: Self.sharedKey) ?? [])
+        let pending = receiver.savedChunks.map(\.chunkID).filter { receiver.isRetired($0) && !done.contains($0.uuidString) }
+        guard !pending.isEmpty else { return }
+        do {
+            let moved = try shareDeletions(pending)
+            message = "以前このMacで削除した音声\(pending.count)件を、共有フォルダ(\(moved)件)とiPhoneからも消すようにしました。"
+        } catch { message = "以前削除した音声を共有フォルダに伝えられませんでした。\(error.localizedDescription)" }
+    }
+
+    private static let sharedKey = "retiredShared"
+
+    /// Moves the shared folder's copies to the Trash and leaves the marks the iPhone reads; remembers what was shared.
+    private func shareDeletions(_ ids: [UUID]) throws -> Int {
+        guard let path = UserDefaults.standard.string(forKey: "relayFolderPath") else { return 0 }
+        let moved = try RelayFolder.retire(ids, in: URL(fileURLWithPath: path, isDirectory: true)) {
+            try FileManager.default.trashItem(at: $0, resultingItemURL: nil)
+        }
+        let done = Set(UserDefaults.standard.stringArray(forKey: Self.sharedKey) ?? []).union(ids.map(\.uuidString))
+        UserDefaults.standard.set(Array(done), forKey: Self.sharedKey)
+        return moved
     }
 
     func cancel() { operation?.cancel() }

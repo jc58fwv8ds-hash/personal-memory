@@ -16,5 +16,5 @@ let package = Package(name: "PersonalMemory", platforms: [.macOS(.v14)], product
         exclude: ["ContentView.swift", "DesignSystem.swift", "Info.plist", "NearbyChunkSender.swift", "PersonalMemoryApp.swift", "RemoteProtocol.swift", "RemoteSession.swift", "WatchCaptureReceiver.swift"],
         sources: ["MemoryCaptureModel.swift", "MemoryEventModel.swift", "DailyMemoryModel.swift", "MemoryEventStore.swift", "CaptureAudioInbox.swift", "SessionChunkInbox.swift"]),
     .testTarget(name: "PersonalMemoryTests", dependencies: ["PersonalMemory", "SessionDomain", "WatchCaptureControl"], path: "PersonalMemoryTests",
-        exclude: ["RemoteProtocolTests.swift"], sources: ["MemoryModelTests.swift", "MemoryEventStoreTests.swift", "CaptureAudioInboxTests.swift", "RecordingCancellationTests.swift", "SessionChunkInboxPiecesTests.swift"])
+        exclude: ["RemoteProtocolTests.swift"], sources: ["MemoryModelTests.swift", "MemoryEventStoreTests.swift", "CaptureAudioInboxTests.swift", "RecordingCancellationTests.swift", "SessionChunkInboxPiecesTests.swift", "RemoveAudioTests.swift"])
 ])

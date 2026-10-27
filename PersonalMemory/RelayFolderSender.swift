@@ -51,6 +51,11 @@ final class RelayFolderSender: ObservableObject {
             }
             UserDefaults.standard.set(Array(sent), forKey: Self.sentKey)
             sentCount = sent.count
+            // Pieces the user deleted on the Mac (2026-10-27): delete this iPhone's audio, then clear the marks.
+            let retired = try RelayFolder.retiredMarks(in: folder)
+            let removed = retired.isEmpty ? 0 : try inbox.removeAudio(of: Set(retired))
+            for id in retired { try RelayFolder.clearMark(id, in: folder) }
+            if removed > 0 { status = "Macで削除された録音\(removed)件を、このiPhoneからも消しました。"; return }
             status = failed > 0 ? "\(failed)件を置けませんでした。次に開いたときにもう一度試します。"
                 : added > 0 ? "\(added)件をフォルダに置きました(合計\(sentCount)件)。" : "送る録音はすべてフォルダにあります(\(sentCount)件)。"
         } catch { status = "録音を送れませんでした。\(error.localizedDescription)" }

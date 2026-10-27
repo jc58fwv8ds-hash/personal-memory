@@ -47,6 +47,29 @@ public struct SessionChunkInbox: Sendable {
         return found.sorted { $0.chunk.start < $1.chunk.start }
     }
 
+    /// Deletes the audio of these pieces from this iPhone after the user deleted them on the Mac (2026-10-27).
+    /// The piece's record (`<chunkID>.json`) stays. Returns how many audio files were deleted.
+    @discardableResult
+    public func removeAudio(of chunkIDs: Set<UUID>) throws -> Int {
+        let manager = FileManager.default
+        guard !chunkIDs.isEmpty, manager.fileExists(atPath: directory.path) else { return 0 }
+        var removed = 0
+        for session in try manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isDirectoryKey])
+        where UUID(uuidString: session.lastPathComponent) != nil {
+            guard (try session.resourceValues(forKeys: [.isDirectoryKey])).isDirectory == true else { continue }
+            for metadata in try manager.contentsOfDirectory(at: session, includingPropertiesForKeys: nil)
+            where metadata.pathExtension == "json" {
+                guard let id = UUID(uuidString: metadata.deletingPathExtension().lastPathComponent),
+                      chunkIDs.contains(id) else { continue }
+                let audio = session.appendingPathComponent(id.uuidString + ".m4a")
+                guard manager.fileExists(atPath: audio.path) else { continue }
+                try manager.removeItem(at: audio)
+                removed += 1
+            }
+        }
+        return removed
+    }
+
     public func receive(fileURL: URL, chunk: RecordingSession.Chunk) throws -> URL {
         guard chunk.sequence > 0, chunk.duration.isFinite, chunk.duration > 0,
               chunk.end >= chunk.start,
